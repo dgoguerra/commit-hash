@@ -19,10 +19,10 @@ module.exports = function(commitRef, opts, next) {
             });
     }
 
-    function findRemoteCommitHash(commitRef, next) {
+    function findReferenceCommitHash(commitRef, next) {
         var commitHash = null;
 
-        spawn(opts.bin ['ls-remote', opts.remote, commitRef])
+        spawn(opts.bin, ['show-ref', '--verify', commitRef])
             .on('close', function(code) {
                 if (code !== 0 || !commitHash) {
                     return next(null, null);
@@ -30,7 +30,8 @@ module.exports = function(commitRef, opts, next) {
                 next(null, commitHash);
             })
             .stdout.on('data', function(data) {
-                commitHash = data.toString().trim();
+                var arr = data.toString().split(' ');
+                commitHash = arr.length && arr[0].trim();
             });
     }
 
@@ -49,6 +50,28 @@ module.exports = function(commitRef, opts, next) {
             });
     }
 
+    function objectIsTag(commitRef, next) {
+        spawn('git', ['describe', '--exact-match', commitRef])
+            .on('close', function(code) {
+                next(null, code === 0);
+            });
+    }
+
+    function findTaggedCommit(tagCommitRef, next) {
+        var commitHash = null;
+
+        spawn('git', ['rev-list', '-n', '1', tagCommitRef])
+            .on('close', function(code) {
+                if (code !== 0 || !commitHash) {
+                    next(null, null);
+                }
+                next(null, commitHash);
+            })
+            .stdout.on('data', function(data) {
+                commitHash = data.toString().trim();
+            });
+    }
+
     if (isFunction(opts)) {
         next = opts;
         opts = {};
@@ -57,7 +80,6 @@ module.exports = function(commitRef, opts, next) {
     opts = opts || {};
     opts.dir = opts.dir || null;
     opts.bin = opts.bin || 'git';
-    opts.remote = opts.remote || 'origin';
     opts.cached = opts.cached || false;
 
     // if a custom directory was provided, chdir to it before starting
@@ -72,16 +94,29 @@ module.exports = function(commitRef, opts, next) {
         refFullName: function(next) {
             findReferenceFullName(commitRef, next);
         }
-    }, function(err, results) {
+    }, function(err, res) {
         if (err) return next(err);
 
         // the given ref is a remote branch, retrieve its current commit
         // from there instead of relying on the local branch's location
         // up to date
-        if (!opts.cached && results.refFullName && results.refFullName.indexOf('refs/remotes/') === 0) {
-            findRemoteCommitHash(commitRef, next);
+        if (!opts.cached && res.refFullName && res.refFullName.indexOf('refs/remotes/') === 0) {
+            findReferenceCommitHash(res.refFullName, next);
         }
+        // a commit hash was found. check if it belongs to a tag to do
+        // further processing, or return it
+        else if (res.commitHash) {
+            objectIsTag(res.commitHash, function(err, isTag) {
+                if (!isTag) return next(null, res.commitHash);
 
-        next(null, results.commitHash);
+                findTaggedCommit(res.commitHash, function(err, taggedCommitHash) {
+                    next(null, taggedCommitHash);
+                });
+            });
+        }
+        // no commit hash found, return null
+        else {
+            next(null, null);
+        }
     });
 };
