@@ -1,4 +1,22 @@
 {
+  "name": "commit-hash",
+  "version": "",
+  "description": "Get commit hash from a branch name, tag, or reference",
+  "homepage": "https://github.com/dgoguerra/commit-hash#readme",
+  "author": "Diego Guerra <dgoguerra.or@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dgoguerra/commit-hash.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dgoguerra/commit-hash/issues"
+  },
+  "keywords": [
+    "git",
+    "commit",
+    "hash"
+  ],
   "dependencies": {
     "async": "^2.0.0",
     "is-function": "^1.0.1"
