@@ -2,6 +2,31 @@ var spawn = require('child_process').spawn,
     async = require('async'),
     isFunction = require('is-function');
 
+function value(val, defaultVal) {
+    return typeof val !== 'undefined' ? val : defaultVal;
+}
+
+function fetchAll(opts, next) {
+    if (isFunction(opts)) {
+        next = opts;
+        opts = {};
+    }
+
+    opts = opts || {};
+    opts.dir = value(opts.dir, null);
+    opts.bin = value(opts.bin, 'git');
+
+    // if a custom directory was provided, chdir to it before starting
+    if (opts.dir) {
+        process.chdir(opts.dir);
+    }
+
+    spawn(opts.bin, ['fetch', '--all'])
+        .on('close', function(code) {
+            next(null);
+        });
+}
+
 module.exports = function(commitRef, opts, next) {
 
     function findLocalCommitHash(commitRef, next) {
@@ -72,51 +97,77 @@ module.exports = function(commitRef, opts, next) {
             });
     }
 
+    function lookupCommitHash(commitRef, next) {
+        async.parallel({
+            commitHash: function(next) {
+                findLocalCommitHash(commitRef, next);
+            },
+            refFullName: function(next) {
+                findReferenceFullName(commitRef, next);
+            }
+        }, function(err, res) {
+            if (err) return next(err);
+
+            // the given ref is a remote branch, retrieve its current commit
+            // from there instead of relying on the local branch's location
+            // up to date
+            if (!opts.cached && res.refFullName && res.refFullName.indexOf('refs/remotes/') === 0) {
+                findReferenceCommitHash(res.refFullName, next);
+            }
+            // a commit hash was found. check if it belongs to a tag to do
+            // further processing, or return it
+            else if (res.commitHash) {
+                objectIsTag(res.commitHash, function(err, isTag) {
+                    if (!isTag) return next(null, res.commitHash);
+
+                    findTaggedCommit(res.commitHash, function(err, taggedCommitHash) {
+                        next(null, taggedCommitHash);
+                    });
+                });
+            }
+            // no commit hash found, return null
+            else {
+                next(null, null);
+            }
+        });
+    }
+
     if (isFunction(opts)) {
         next = opts;
         opts = {};
     }
 
     opts = opts || {};
-    opts.dir = opts.dir || null;
-    opts.bin = opts.bin || 'git';
-    opts.cached = opts.cached || false;
+    opts.dir = value(opts.dir, null);
+    opts.bin = value(opts.bin, 'git');
+    opts.cached = value(opts.cached, false);
+    opts.fetch = value(opts.fetch, false);
 
     // if a custom directory was provided, chdir to it before starting
     if (opts.dir) {
         process.chdir(opts.dir);
     }
 
-    async.parallel({
-        commitHash: function(next) {
-            findLocalCommitHash(commitRef, next);
+    async.series({
+        fetchAll: function(next) {
+            // if the user sets opts.fetch to true, fetch all changes before
+            // looking up the asked ref. ideally wouldn't be necessary if
+            // relying on `git ls-remote` to lookup the commit ref directly
+            // agains the remote, but apparently its not possible to cover
+            // all cases with it
+            if (opts.fetch) {
+                fetchAll(opts, next);
+            } else {
+                next(null);
+            }
         },
-        refFullName: function(next) {
-            findReferenceFullName(commitRef, next);
+        commitHash: function(next) {
+            lookupCommitHash(commitRef, next);
         }
     }, function(err, res) {
-        if (err) return next(err);
-
-        // the given ref is a remote branch, retrieve its current commit
-        // from there instead of relying on the local branch's location
-        // up to date
-        if (!opts.cached && res.refFullName && res.refFullName.indexOf('refs/remotes/') === 0) {
-            findReferenceCommitHash(res.refFullName, next);
-        }
-        // a commit hash was found. check if it belongs to a tag to do
-        // further processing, or return it
-        else if (res.commitHash) {
-            objectIsTag(res.commitHash, function(err, isTag) {
-                if (!isTag) return next(null, res.commitHash);
-
-                findTaggedCommit(res.commitHash, function(err, taggedCommitHash) {
-                    next(null, taggedCommitHash);
-                });
-            });
-        }
-        // no commit hash found, return null
-        else {
-            next(null, null);
-        }
+        next(err, res.commitHash);
     });
 };
+
+
+module.exports.fetchAll = fetchAll;
