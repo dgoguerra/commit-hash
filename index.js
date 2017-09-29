@@ -27,7 +27,7 @@ function fetchAll(opts, next) {
         });
 }
 
-module.exports = function(commitRef, opts, next) {
+function getCommitHash(commitRef, opts, next) {
 
     function findLocalCommitHash(commitRef, next) {
         var commitHash = null;
@@ -167,7 +167,67 @@ module.exports = function(commitRef, opts, next) {
     }, function(err, res) {
         next(err, res.commitHash);
     });
-};
+}
 
+function getCommitInfo(commitRef, opts, next) {
+    if (isFunction(opts)) {
+        next = opts;
+        opts = {};
+    }
+
+    opts = opts || {};
+    opts.dir = value(opts.dir, null);
+    opts.bin = value(opts.bin, 'git');
+
+    // if a custom directory was provided, chdir to it before starting
+    if (opts.dir) {
+        process.chdir(opts.dir);
+    }
+
+    getCommitHash(commitRef, function(err, commitHash) {
+        if (err) return next(err);
+
+        if (!commitHash) {
+            return next(null, null);
+        }
+
+        async.parallel({
+            author: function(next) {
+                var authorInfo = '';
+                spawn(opts.bin, ['log', '--format=%ad::%an::%ae', '-n', '1', commitHash])
+                    .on('close', function(code) {
+                        var match = /(.+)::(.+)::(.+)/.exec(authorInfo);
+
+                        next(null, {
+                            date: match[1],
+                            name: match[2],
+                            email: match[3]
+                        });
+                    })
+                    .stdout.on('data', function(data) {
+                        authorInfo = data.toString();
+                    });
+            },
+            message: function(next) {
+                var message = '';
+                spawn(opts.bin, ['log', '--format=%B', '-n', '1', commitHash])
+                    .on('close', function(code) {
+                        next(null, message);
+                    })
+                    .stdout.on('data', function(data) {
+                        message += data.toString();
+                    });
+            }
+        }, function(err, result) {
+            if (err) return next(err);
+            result.hash = commitHash;
+            next(null, result);
+        })
+    });
+}
+
+module.exports = getCommitHash;
+
+module.exports.commitInfo = getCommitInfo;
 
 module.exports.fetchAll = fetchAll;

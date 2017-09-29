@@ -52,4 +52,26 @@ commitHash.fetchAll(function() {
             t.end();
         });
     });
+
+    tape('get commit message and author', function(t) {
+        commitHash.commitInfo('21f6ba4e644e77d6e20eaa5156a928b6d75fdf76', function(err, info) {
+            t.deepEquals(info, {
+                hash: '21f6ba4e644e77d6e20eaa5156a928b6d75fdf76',
+                message: 'initial empty commit\n\n',
+                author: {
+                    date: 'Wed Jul 13 10:08:56 2016 +0200',
+                    name: 'Diego Guerra',
+                    email: 'dgoguerra.or@gmail.com'
+                }
+            });
+            t.end();
+        });
+    });
+
+    tape('unknown commit returns null as commit info', function(t) {
+        commitHash.commitInfo('unknown', function(err, info) {
+            t.deepEquals(info, null);
+            t.end();
+        });
+    });
 });
