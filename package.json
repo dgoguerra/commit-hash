@@ -1,6 +1,6 @@
 {
   "name": "commit-hash",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Get commit hash from a branch name, tag, or reference",
   "homepage": "https://github.com/dgoguerra/commit-hash#readme",
   "author": "Diego Guerra <dgoguerra.or@gmail.com>",
