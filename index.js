@@ -21,7 +21,7 @@ function fetchAll(opts, next) {
         process.chdir(opts.dir);
     }
 
-    spawn(opts.bin, ['fetch', '--all'])
+    spawn(opts.bin, ['fetch', '--tags', '--all'])
         .on('close', function(code) {
             next(null);
         });
@@ -29,54 +29,10 @@ function fetchAll(opts, next) {
 
 function getCommitHash(commitRef, opts, next) {
 
-    function findLocalCommitHash(commitRef, next) {
-        var commitHash = null;
-
-        spawn(opts.bin, ['rev-parse', '--verify', commitRef])
-            .on('close', function(code) {
-                if (code !== 0 || !commitHash) {
-                    return next(null, null);
-                }
-                next(null, commitHash);
-            })
-            .stdout.on('data', function(data) {
-                commitHash = data.toString().trim();
-            });
-    }
-
-    function findReferenceCommitHash(commitRef, next) {
-        var commitHash = null;
-
-        spawn(opts.bin, ['show-ref', '--verify', commitRef])
-            .on('close', function(code) {
-                if (code !== 0 || !commitHash) {
-                    return next(null, null);
-                }
-                next(null, commitHash);
-            })
-            .stdout.on('data', function(data) {
-                var arr = data.toString().split(' ');
-                commitHash = arr.length && arr[0].trim();
-            });
-    }
-
-    function findReferenceFullName(commitRef, next) {
-        var commitHash = null;
-
-        spawn(opts.bin, ['rev-parse', '--symbolic-full-name', commitRef])
-            .on('close', function(code) {
-                if (code !== 0 || !commitHash) {
-                    return next(null, null);
-                }
-                next(null, commitHash);
-            })
-            .stdout.on('data', function(data) {
-                commitHash = data.toString().trim();
-            });
-    }
+    console.log('getCommitHash(\'%s\')', commitRef);
 
     function objectIsTag(commitRef, next) {
-        spawn('git', ['describe', '--exact-match', commitRef])
+        spawn(opts.bin, ['describe', '--exact-match', commitRef])
             .on('close', function(code) {
                 next(null, code === 0);
             });
@@ -85,7 +41,7 @@ function getCommitHash(commitRef, opts, next) {
     function findTaggedCommit(tagCommitRef, next) {
         var commitHash = null;
 
-        spawn('git', ['rev-list', '-n', '1', tagCommitRef])
+        spawn(opts.bin, ['rev-list', '-n', '1', tagCommitRef])
             .on('close', function(code) {
                 if (code !== 0 || !commitHash) {
                     next(null, null);
@@ -98,37 +54,55 @@ function getCommitHash(commitRef, opts, next) {
     }
 
     function lookupCommitHash(commitRef, next) {
-        async.parallel({
-            commitHash: function(next) {
-                findLocalCommitHash(commitRef, next);
-            },
-            refFullName: function(next) {
-                findReferenceFullName(commitRef, next);
-            }
-        }, function(err, res) {
-            if (err) return next(err);
 
-            // the given ref is a remote branch, retrieve its current commit
-            // from there instead of relying on the local branch's location
-            // up to date
-            if (!opts.cached && res.refFullName && res.refFullName.indexOf('refs/remotes/') === 0) {
-                findReferenceCommitHash(res.refFullName, next);
+        function revParse(ref, next) {
+            var commitHash = null;
+
+            spawn(opts.bin, ['rev-parse', ref])
+                .on('close', function(code) {
+                    if (code !== 0 || !commitHash) {
+                        return next(null, null);
+                    }
+                    next(null, commitHash);
+                })
+                .stdout.on('data', function(data) {
+                    commitHash = data.toString().trim();
+                });
+        }
+
+        var refsToLookup = [
+            'refs/remotes/origin/'+commitRef, // ex: if the commitRef is master
+            'refs/remotes/'+commitRef, // ex: origin/master
+            'refs/tags/'+commitRef, // ex: v1.2.3
+            commitRef // ex: asd123f
+        ];
+
+        async.tryEach(refsToLookup.map(function(ref) {
+            return function(next) {
+                revParse(ref, function(err, commitHash) {
+                    if (err || !commitHash) {
+                        console.log(ref+' failed');
+                        return next(new Error('invalid ref'));
+                    }
+                    console.log(ref+' ok!');
+                    next(null, commitHash);
+                });
+            };
+        }), function(err, commitHash) {
+            // no commit hash found, return null
+            if (err) {
+                return next(null, null);
             }
+
             // a commit hash was found. check if it belongs to a tag to do
             // further processing, or return it
-            else if (res.commitHash) {
-                objectIsTag(res.commitHash, function(err, isTag) {
-                    if (!isTag) return next(null, res.commitHash);
+            objectIsTag(commitHash, function(err, isTag) {
+                if (!isTag) return next(null, commitHash);
 
-                    findTaggedCommit(res.commitHash, function(err, taggedCommitHash) {
-                        next(null, taggedCommitHash);
-                    });
+                findTaggedCommit(commitHash, function(err, taggedCommitHash) {
+                    next(null, taggedCommitHash);
                 });
-            }
-            // no commit hash found, return null
-            else {
-                next(null, null);
-            }
+            });
         });
     }
 

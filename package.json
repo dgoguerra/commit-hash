@@ -18,7 +18,7 @@
     "hash"
   ],
   "dependencies": {
-    "async": "^2.0.0",
+    "async": "^2.5.0",
     "is-function": "^1.0.1"
   },
   "devDependencies": {
