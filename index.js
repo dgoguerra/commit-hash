@@ -29,8 +29,6 @@ function fetchAll(opts, next) {
 
 function getCommitHash(commitRef, opts, next) {
 
-    console.log('getCommitHash(\'%s\')', commitRef);
-
     function objectIsTag(commitRef, next) {
         spawn(opts.bin, ['describe', '--exact-match', commitRef])
             .on('close', function(code) {
@@ -81,10 +79,8 @@ function getCommitHash(commitRef, opts, next) {
             return function(next) {
                 revParse(ref, function(err, commitHash) {
                     if (err || !commitHash) {
-                        console.log(ref+' failed');
                         return next(new Error('invalid ref'));
                     }
-                    console.log(ref+' ok!');
                     next(null, commitHash);
                 });
             };
