@@ -1,9 +1,32 @@
-var spawn = require('child_process').spawn,
+var childProcess = require('child_process'),
     async = require('async'),
-    isFunction = require('is-function');
+    isFunction = require('is-function'),
+    debug = require('debug')('commit-hash');
 
 function value(val, defaultVal) {
     return typeof val !== 'undefined' ? val : defaultVal;
+}
+
+function spawn(bin, args) {
+    if (debug.enabled) {
+        debug(bin+' '+args.join(' '));
+    }
+
+    var proc = childProcess.spawn(bin, args);
+
+    proc.on('error', function(err) {
+        debug('error: '+err.message);
+    });
+
+    proc.stdout.on('data', function(data) {
+        debug('stdout: '+data.toString().trim());
+    });
+
+    proc.stderr.on('data', function(data) {
+        debug('stderr: '+data.toString().trim());
+    });
+
+    return proc;
 }
 
 function fetchAll(opts, next) {
@@ -18,6 +41,7 @@ function fetchAll(opts, next) {
 
     // if a custom directory was provided, chdir to it before starting
     if (opts.dir) {
+        debug('cd '+opts.dir);
         process.chdir(opts.dir);
     }
 
@@ -30,6 +54,7 @@ function fetchAll(opts, next) {
 function getCommitHash(commitRef, opts, next) {
 
     function objectIsTag(commitRef, next) {
+        debug('check if commit refers to a tag');
         spawn(opts.bin, ['describe', '--exact-match', commitRef])
             .on('close', function(code) {
                 next(null, code === 0);
@@ -39,6 +64,7 @@ function getCommitHash(commitRef, opts, next) {
     function findTaggedCommit(tagCommitRef, next) {
         var commitHash = null;
 
+        debug('resolve tagged commit');
         spawn(opts.bin, ['rev-list', '-n', '1', tagCommitRef])
             .on('close', function(code) {
                 if (code !== 0 || !commitHash) {
@@ -115,6 +141,7 @@ function getCommitHash(commitRef, opts, next) {
 
     // if a custom directory was provided, chdir to it before starting
     if (opts.dir) {
+        debug('cd '+opts.dir);
         process.chdir(opts.dir);
     }
 
@@ -151,6 +178,7 @@ function getCommitInfo(commitRef, opts, next) {
 
     // if a custom directory was provided, chdir to it before starting
     if (opts.dir) {
+        debug('cd '+opts.dir);
         process.chdir(opts.dir);
     }
 
