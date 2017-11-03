@@ -28,5 +28,8 @@
   },
   "scripts": {
     "test": "node test.js"
+  },
+  "bin": {
+    "commit-hash": "cli.js"
   }
 }
