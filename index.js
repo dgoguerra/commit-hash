@@ -182,7 +182,7 @@ function getCommitInfo(commitRef, opts, next) {
         process.chdir(opts.dir);
     }
 
-    getCommitHash(commitRef, function(err, commitHash) {
+    getCommitHash(commitRef, opts, function(err, commitHash) {
         if (err) return next(err);
 
         if (!commitHash) {
